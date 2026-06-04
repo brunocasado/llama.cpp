@@ -1,0 +1,30 @@
+{
+  "tweet": {
+    "url": "https://x.com/qvac/status/2061463617216651365",
+    "cached_file": "docs/research/turboquant/tweet-qvac-2026-06-01.md",
+    "extracted_via": "Playwright public page extraction",
+    "extracted_on": "2026-06-04T11:31:00-03:00"
+  },
+  "upstream": {
+    "repo": "https://github.com/ggml-org/llama.cpp",
+    "tag": "b9509",
+    "commit": "6f3a9f3de"
+  },
+  "references": [
+    {
+      "repo": "https://github.com/AmesianX/TurboQuant",
+      "license": "MIT",
+      "role": "llama.cpp-oriented reference"
+    },
+    {
+      "repo": "https://github.com/mitkox/vllm-turboquant",
+      "license": "Apache-2.0",
+      "role": "CUDA/vLLM serving reference"
+    },
+    {
+      "repo": "https://github.com/0xSero/turboquant",
+      "license": "GPL-3.0",
+      "role": "algorithm/kernel reference only; avoid code copying into MIT-friendly fork"
+    }
+  ]
+}

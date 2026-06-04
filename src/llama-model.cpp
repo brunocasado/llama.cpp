@@ -9,6 +9,7 @@
 #include "llama-model-loader.h"
 
 #include "llama-kv-cache.h"
+#include "llama-kv-codec.h"
 #include "llama-kv-cache-iswa.h"
 #include "llama-kv-cache-dsa.h"
 #include "llama-memory-hybrid.h"
@@ -1970,6 +1971,14 @@ ggml_tensor * llama_model::get_rope_factors(const llama_cparams & cparams, int i
 
 llama_memory_i * llama_model::create_memory(const llama_memory_params & params, const llama_cparams & cparams) const {
     llama_memory_i * res;
+
+    auto kv_codec = llama_kv_codec_init(params.kv_codec_type);
+    if (!kv_codec) {
+        throw std::runtime_error(
+                "unsupported KV cache codec: " + std::string(llama_kv_cache_codec_type_name(params.kv_codec_type)));
+    }
+
+    LLAMA_LOG_DEBUG("%s: using KV cache codec %s\n", __func__, kv_codec->name());
 
     switch (arch) {
         // Models that need specific instantiation should be handled in the

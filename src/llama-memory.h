@@ -2,6 +2,7 @@
 
 #include "llama.h"
 #include "llama-graph.h"
+#include "llama-kv-codec.h"
 
 #include <map>
 #include <memory>
@@ -18,6 +19,7 @@ struct llama_memory_params {
     // kv cache
     ggml_type type_k;
     ggml_type type_v;
+    llama_kv_cache_codec_type kv_codec_type;
 
     // use full-size SWA cache
     bool swa_full;
