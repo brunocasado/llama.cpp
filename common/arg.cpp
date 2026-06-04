@@ -416,6 +416,13 @@ static std::string get_all_kv_cache_types() {
     return msg.str();
 }
 
+static std::string get_all_kv_cache_compressors() {
+    return string_format("%s, %s, %s",
+            llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO),
+            llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_DIRECT),
+            llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD));
+}
+
 static llama_kv_cache_codec_type kv_cache_codec_type_from_str(const std::string & s) {
     if (s == llama_kv_cache_codec_type_name(LLAMA_KV_CACHE_CODEC_TYPE_LEGACY)) {
         return LLAMA_KV_CACHE_CODEC_TYPE_LEGACY;
@@ -426,6 +433,22 @@ static llama_kv_cache_codec_type kv_cache_codec_type_from_str(const std::string 
     }
 
     throw std::runtime_error("Unsupported KV cache codec: " + s);
+}
+
+static llama_kv_cache_compressor_type kv_cache_compressor_type_from_str(const std::string & s) {
+    if (s == llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO)) {
+        return LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO;
+    }
+
+    if (s == llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_DIRECT)) {
+        return LLAMA_KV_CACHE_COMPRESSOR_TYPE_DIRECT;
+    }
+
+    if (s == llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD)) {
+        return LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD;
+    }
+
+    throw std::runtime_error("Unsupported KV cache compressor: " + s);
 }
 
 static std::string get_all_kv_cache_codec_types() {
@@ -2099,6 +2122,56 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.kv_cache_codec_type = kv_cache_codec_type_from_str(value);
         }
     ).set_env("LLAMA_ARG_KV_CACHE_CODEC"));
+    add_opt(common_arg(
+        {"--turboquant-type-k"}, "TYPE",
+        string_format(
+            "TurboQuant KV data type override for K\n"
+            "allowed values: %s\n"
+            "(default: inherit --cache-type-k)",
+            get_all_kv_cache_types().c_str()
+        ),
+        [](common_params & params, const std::string & value) {
+            params.cache_type_k = kv_cache_type_from_str(value);
+        }
+    ).set_env("LLAMA_ARG_TURBOQUANT_TYPE_K"));
+    add_opt(common_arg(
+        {"--turboquant-type-v"}, "TYPE",
+        string_format(
+            "TurboQuant KV data type override for V\n"
+            "allowed values: %s\n"
+            "(default: inherit --cache-type-v)",
+            get_all_kv_cache_types().c_str()
+        ),
+        [](common_params & params, const std::string & value) {
+            params.cache_type_v = kv_cache_type_from_str(value);
+        }
+    ).set_env("LLAMA_ARG_TURBOQUANT_TYPE_V"));
+    add_opt(common_arg(
+        {"--kv-cache-compressor-k"}, "TYPE",
+        string_format(
+            "KV cache compressor for K\n"
+            "allowed values: %s\n"
+            "(default: %s)",
+            get_all_kv_cache_compressors().c_str(),
+            llama_kv_cache_compressor_type_name(params.kv_cache_compressor_k)
+        ),
+        [](common_params & params, const std::string & value) {
+            params.kv_cache_compressor_k = kv_cache_compressor_type_from_str(value);
+        }
+    ).set_env("LLAMA_ARG_KV_CACHE_COMPRESSOR_K"));
+    add_opt(common_arg(
+        {"--kv-cache-compressor-v"}, "TYPE",
+        string_format(
+            "KV cache compressor for V\n"
+            "allowed values: %s\n"
+            "(default: %s)",
+            get_all_kv_cache_compressors().c_str(),
+            llama_kv_cache_compressor_type_name(params.kv_cache_compressor_v)
+        ),
+        [](common_params & params, const std::string & value) {
+            params.kv_cache_compressor_v = kv_cache_compressor_type_from_str(value);
+        }
+    ).set_env("LLAMA_ARG_KV_CACHE_COMPRESSOR_V"));
     add_opt(common_arg(
         {"--hellaswag"},
         "compute HellaSwag score over random tasks from datafile supplied with -f",

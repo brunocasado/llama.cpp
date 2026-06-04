@@ -17,6 +17,8 @@ public:
             const llama_model & model,
                     ggml_type   type_k,
                     ggml_type   type_v,
+    llama_kv_cache_compressor_type compressor_k,
+    llama_kv_cache_compressor_type compressor_v,
                          bool   v_trans,
                          bool   offload,
                          bool   swa_full,

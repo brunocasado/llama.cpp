@@ -13,6 +13,8 @@ llama_memory_hybrid_iswa::llama_memory_hybrid_iswa(
                             /* attn */
                 ggml_type   type_k,
                 ggml_type   type_v,
+llama_kv_cache_compressor_type compressor_k,
+llama_kv_cache_compressor_type compressor_v,
                      bool   v_trans,
                      bool   swa_full,
                  uint32_t   kv_size,
@@ -35,6 +37,8 @@ llama_memory_hybrid_iswa::llama_memory_hybrid_iswa(
         model,
         type_k,
         type_v,
+        compressor_k,
+        compressor_v,
         v_trans,
         offload,
         swa_full,

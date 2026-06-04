@@ -472,6 +472,8 @@ struct common_params {
     enum llama_attention_type    attention_type    = LLAMA_ATTENTION_TYPE_UNSPECIFIED; // attention type for embeddings
     enum llama_flash_attn_type   flash_attn_type   = LLAMA_FLASH_ATTN_TYPE_AUTO; // whether to use Flash Attention
     enum llama_kv_cache_codec_type kv_cache_codec_type = LLAMA_KV_CACHE_CODEC_TYPE_LEGACY; // KV cache codec
+    enum llama_kv_cache_compressor_type kv_cache_compressor_k = LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO; // compressor for K cache
+    enum llama_kv_cache_compressor_type kv_cache_compressor_v = LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO; // compressor for V cache
 
     struct common_params_sampling    sampling;
     struct common_params_speculative speculative;

@@ -303,6 +303,8 @@ llama_context::llama_context(
             /*.type_k        =*/ params.type_k,
             /*.type_v        =*/ params.type_v,
             /*.kv_codec_type =*/ params.kv_cache_codec_type,
+            /*.kv_compressor_k =*/ params.kv_cache_compressor_k,
+            /*.kv_compressor_v =*/ params.kv_cache_compressor_v,
             /*.swa_full      =*/ params.swa_full,
             /*.ctx_type      =*/ cparams.ctx_type,
         };
@@ -3367,6 +3369,8 @@ llama_context_params llama_context_default_params() {
         /*.type_k                      =*/ GGML_TYPE_F16,
         /*.type_v                      =*/ GGML_TYPE_F16,
         /*.kv_cache_codec_type         =*/ LLAMA_KV_CACHE_CODEC_TYPE_LEGACY,
+        /*.kv_cache_compressor_k       =*/ LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO,
+        /*.kv_cache_compressor_v       =*/ LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO,
         /*.abort_callback              =*/ nullptr,
         /*.abort_callback_data         =*/ nullptr,
         /*.embeddings                  =*/ false,

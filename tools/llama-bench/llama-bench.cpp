@@ -332,6 +332,8 @@ struct cmd_params {
     std::vector<ggml_type>           type_k;
     std::vector<ggml_type>           type_v;
     std::vector<llama_kv_cache_codec_type> kv_cache_codec_type;
+    std::vector<llama_kv_cache_compressor_type> kv_cache_compressor_k;
+    std::vector<llama_kv_cache_compressor_type> kv_cache_compressor_v;
     std::vector<int>                 n_threads;
     std::vector<std::string>         cpu_mask;
     std::vector<bool>                cpu_strict;
@@ -377,6 +379,8 @@ static const cmd_params cmd_params_defaults = {
     /* type_k               */ { GGML_TYPE_F16 },
     /* type_v               */ { GGML_TYPE_F16 },
     /* kv_cache_codec_type  */ { LLAMA_KV_CACHE_CODEC_TYPE_LEGACY },
+    /* kv_cache_compressor_k*/ { LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO },
+    /* kv_cache_compressor_v*/ { LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO },
     /* n_threads            */ { common_cpu_get_num_math() },
     /* cpu_mask             */ { "0x0" },
     /* cpu_strict           */ { false },
@@ -448,6 +452,10 @@ static void print_usage(int /* argc */, char ** argv) {
     printf("  -ctk, --cache-type-k <t>                    (default: %s)\n", join(transform_to_str(cmd_params_defaults.type_k, ggml_type_name), ",").c_str());
     printf("  -ctv, --cache-type-v <t>                    (default: %s)\n", join(transform_to_str(cmd_params_defaults.type_v, ggml_type_name), ",").c_str());
     printf("  --kv-cache-codec <t>                        (default: %s)\n", join(transform_to_str(cmd_params_defaults.kv_cache_codec_type, llama_kv_cache_codec_type_name), ",").c_str());
+    printf("  --turboquant-type-k <t>                     (default: inherit --cache-type-k)\n");
+    printf("  --turboquant-type-v <t>                     (default: inherit --cache-type-v)\n");
+    printf("  --kv-cache-compressor-k <t>                 (default: auto)\n");
+    printf("  --kv-cache-compressor-v <t>                 (default: auto)\n");
     printf("  -t, --threads <n>                           (default: %s)\n", join(cmd_params_defaults.n_threads, ",").c_str());
     printf("  -C, --cpu-mask <hex,hex>                    (default: %s)\n", join(cmd_params_defaults.cpu_mask, ",").c_str());
     printf("  --cpu-strict <0|1>                          (default: %s)\n", join(cmd_params_defaults.cpu_strict, ",").c_str());
@@ -513,6 +521,20 @@ static llama_kv_cache_codec_type kv_cache_codec_type_from_name(const std::string
     }
 
     return (llama_kv_cache_codec_type) -1;
+}
+
+static llama_kv_cache_compressor_type kv_cache_compressor_type_from_name(const std::string & s) {
+    if (s == llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO)) {
+        return LLAMA_KV_CACHE_COMPRESSOR_TYPE_AUTO;
+    }
+    if (s == llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_DIRECT)) {
+        return LLAMA_KV_CACHE_COMPRESSOR_TYPE_DIRECT;
+    }
+    if (s == llama_kv_cache_compressor_type_name(LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD)) {
+        return LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD;
+    }
+
+    return (llama_kv_cache_compressor_type) -1;
 }
 
 static cmd_params parse_cmd_params(int argc, char ** argv) {
@@ -659,6 +681,46 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                     break;
                 }
                 params.type_v.insert(params.type_v.end(), types.begin(), types.end());
+            } else if (arg == "--turboquant-type-k") {
+                if (++i >= argc) {
+                    invalid_param = true;
+                    break;
+                }
+                auto p = string_split<std::string>(argv[i], split_delim);
+
+                std::vector<ggml_type> types;
+                for (const auto & t : p) {
+                    ggml_type gt = ggml_type_from_name(t);
+                    if (gt == GGML_TYPE_COUNT) {
+                        invalid_param = true;
+                        break;
+                    }
+                    types.push_back(gt);
+                }
+                if (invalid_param) {
+                    break;
+                }
+                params.type_k.insert(params.type_k.end(), types.begin(), types.end());
+            } else if (arg == "--turboquant-type-v") {
+                if (++i >= argc) {
+                    invalid_param = true;
+                    break;
+                }
+                auto p = string_split<std::string>(argv[i], split_delim);
+
+                std::vector<ggml_type> types;
+                for (const auto & t : p) {
+                    ggml_type gt = ggml_type_from_name(t);
+                    if (gt == GGML_TYPE_COUNT) {
+                        invalid_param = true;
+                        break;
+                    }
+                    types.push_back(gt);
+                }
+                if (invalid_param) {
+                    break;
+                }
+                params.type_v.insert(params.type_v.end(), types.begin(), types.end());
             } else if (arg == "--kv-cache-codec") {
                 if (++i >= argc) {
                     invalid_param = true;
@@ -679,6 +741,46 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
                     break;
                 }
                 params.kv_cache_codec_type.insert(params.kv_cache_codec_type.end(), types.begin(), types.end());
+            } else if (arg == "--kv-cache-compressor-k") {
+                if (++i >= argc) {
+                    invalid_param = true;
+                    break;
+                }
+                auto p = string_split<std::string>(argv[i], split_delim);
+
+                std::vector<llama_kv_cache_compressor_type> types;
+                for (const auto & t : p) {
+                    auto type = kv_cache_compressor_type_from_name(t);
+                    if ((int) type < 0) {
+                        invalid_param = true;
+                        break;
+                    }
+                    types.push_back(type);
+                }
+                if (invalid_param) {
+                    break;
+                }
+                params.kv_cache_compressor_k.insert(params.kv_cache_compressor_k.end(), types.begin(), types.end());
+            } else if (arg == "--kv-cache-compressor-v") {
+                if (++i >= argc) {
+                    invalid_param = true;
+                    break;
+                }
+                auto p = string_split<std::string>(argv[i], split_delim);
+
+                std::vector<llama_kv_cache_compressor_type> types;
+                for (const auto & t : p) {
+                    auto type = kv_cache_compressor_type_from_name(t);
+                    if ((int) type < 0) {
+                        invalid_param = true;
+                        break;
+                    }
+                    types.push_back(type);
+                }
+                if (invalid_param) {
+                    break;
+                }
+                params.kv_cache_compressor_v.insert(params.kv_cache_compressor_v.end(), types.begin(), types.end());
             } else if (arg == "-dev" || arg == "--device") {
                 if (++i >= argc) {
                     invalid_param = true;
@@ -1116,6 +1218,12 @@ static cmd_params parse_cmd_params(int argc, char ** argv) {
     if (params.kv_cache_codec_type.empty()) {
         params.kv_cache_codec_type = cmd_params_defaults.kv_cache_codec_type;
     }
+    if (params.kv_cache_compressor_k.empty()) {
+        params.kv_cache_compressor_k = cmd_params_defaults.kv_cache_compressor_k;
+    }
+    if (params.kv_cache_compressor_v.empty()) {
+        params.kv_cache_compressor_v = cmd_params_defaults.kv_cache_compressor_v;
+    }
     if (params.n_gpu_layers.empty()) {
         params.n_gpu_layers = cmd_params_defaults.n_gpu_layers;
     }
@@ -1190,6 +1298,8 @@ struct cmd_params_instance {
     ggml_type          type_k;
     ggml_type          type_v;
     llama_kv_cache_codec_type kv_cache_codec_type;
+    llama_kv_cache_compressor_type kv_cache_compressor_k;
+    llama_kv_cache_compressor_type kv_cache_compressor_v;
     int                n_threads;
     std::string        cpu_mask;
     bool               cpu_strict;
@@ -1283,6 +1393,8 @@ struct cmd_params_instance {
         cparams.type_k          = type_k;
         cparams.type_v          = type_v;
         cparams.kv_cache_codec_type = kv_cache_codec_type;
+        cparams.kv_cache_compressor_k = kv_cache_compressor_k;
+        cparams.kv_cache_compressor_v = kv_cache_compressor_v;
         cparams.offload_kqv     = !no_kv_offload;
         cparams.flash_attn_type = flash_attn;
         cparams.embeddings      = embeddings;
@@ -1318,6 +1430,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
     for (const auto & tk : params.type_k)
     for (const auto & tv : params.type_v)
     for (const auto & kvc : params.kv_cache_codec_type)
+    for (const auto & tqck : params.kv_cache_compressor_k)
+    for (const auto & tqcv : params.kv_cache_compressor_v)
     for (const auto & nkvo : params.no_kv_offload)
     for (const auto & fa : params.flash_attn)
     for (const auto & nt : params.n_threads)
@@ -1339,6 +1453,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
                 /* .type_k       = */ tk,
                 /* .type_v       = */ tv,
                 /* .kv_cache_codec_type = */ kvc,
+                /* .kv_cache_compressor_k = */ tqck,
+                /* .kv_cache_compressor_v = */ tqcv,
                 /* .n_threads    = */ nt,
                 /* .cpu_mask     = */ cm,
                 /* .cpu_strict   = */ cs,
@@ -1377,6 +1493,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
                 /* .type_k       = */ tk,
                 /* .type_v       = */ tv,
                 /* .kv_cache_codec_type = */ kvc,
+                /* .kv_cache_compressor_k = */ tqck,
+                /* .kv_cache_compressor_v = */ tqcv,
                 /* .n_threads    = */ nt,
                 /* .cpu_mask     = */ cm,
                 /* .cpu_strict   = */ cs,
@@ -1415,6 +1533,8 @@ static std::vector<cmd_params_instance> get_cmd_params_instances(const cmd_param
                 /* .type_k       = */ tk,
                 /* .type_v       = */ tv,
                 /* .kv_cache_codec_type = */ kvc,
+                /* .kv_cache_compressor_k = */ tqck,
+                /* .kv_cache_compressor_v = */ tqcv,
                 /* .n_threads    = */ nt,
                 /* .cpu_mask     = */ cm,
                 /* .cpu_strict   = */ cs,
@@ -1462,6 +1582,8 @@ struct test {
     ggml_type                type_k;
     ggml_type                type_v;
     llama_kv_cache_codec_type kv_cache_codec_type;
+    llama_kv_cache_compressor_type kv_cache_compressor_k;
+    llama_kv_cache_compressor_type kv_cache_compressor_v;
     int                      n_gpu_layers;
     int                      n_cpu_moe;
     llama_split_mode         split_mode;
@@ -1503,6 +1625,8 @@ struct test {
         type_k         = inst.type_k;
         type_v         = inst.type_v;
         kv_cache_codec_type = inst.kv_cache_codec_type;
+        kv_cache_compressor_k = inst.kv_cache_compressor_k;
+        kv_cache_compressor_v = inst.kv_cache_compressor_v;
         n_gpu_layers   = inst.n_gpu_layers;
         n_cpu_moe      = inst.n_cpu_moe;
         split_mode     = inst.split_mode;
@@ -1573,7 +1697,7 @@ struct test {
             "build_commit",   "build_number",   "cpu_info",      "gpu_info",       "backends",
             "model_filename", "model_type",     "model_size",    "model_n_params", "n_batch",
             "n_ubatch",       "n_threads",      "cpu_mask",      "cpu_strict",     "poll",
-            "type_k",         "type_v",         "kv_cache_codec", "n_gpu_layers",  "n_cpu_moe",      "split_mode",
+            "type_k",         "type_v",         "kv_cache_codec", "kv_compressor_k", "kv_compressor_v", "n_gpu_layers",  "n_cpu_moe",      "split_mode",
             "main_gpu",       "no_kv_offload",  "flash_attn",    "devices",        "tensor_split",
             "tensor_buft_overrides",            "use_mmap",      "use_direct_io",  "embeddings",
             "no_op_offload",  "no_host",        "fit_target",     "fit_min_ctx",
@@ -1658,6 +1782,8 @@ struct test {
                                             ggml_type_name(type_k),
                                             ggml_type_name(type_v),
                                             llama_kv_cache_codec_type_name(kv_cache_codec_type),
+                                            llama_kv_cache_compressor_type_name(kv_cache_compressor_k),
+                                            llama_kv_cache_compressor_type_name(kv_cache_compressor_v),
                                             std::to_string(n_gpu_layers),
                                             std::to_string(n_cpu_moe),
                                             split_mode_str(split_mode),

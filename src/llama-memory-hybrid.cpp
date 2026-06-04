@@ -13,6 +13,8 @@ llama_memory_hybrid::llama_memory_hybrid(
                             /* attn */
                 ggml_type   type_k,
                 ggml_type   type_v,
+llama_kv_cache_compressor_type compressor_k,
+llama_kv_cache_compressor_type compressor_v,
                      bool   v_trans,
                  uint32_t   kv_size,
                  uint32_t   n_pad,
@@ -36,6 +38,8 @@ llama_memory_hybrid::llama_memory_hybrid(
         model.hparams,
         type_k,
         type_v,
+        compressor_k,
+        compressor_v,
         v_trans,
         offload,
         unified,

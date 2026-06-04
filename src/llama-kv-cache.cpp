@@ -82,6 +82,8 @@ llama_kv_cache::llama_kv_cache(
         const llama_hparams & hparams,
                 ggml_type   type_k,
                 ggml_type   type_v,
+llama_kv_cache_compressor_type compressor_k,
+llama_kv_cache_compressor_type compressor_v,
                      bool   v_trans,
                      bool   offload,
                      bool   unified,
@@ -92,7 +94,7 @@ llama_kv_cache::llama_kv_cache(
            llama_swa_type   swa_type,
     const layer_filter_cb & filter,
     const  layer_reuse_cb & reuse) :
-    model(model), hparams(hparams), v_trans(v_trans),
+    model(model), hparams(hparams), v_trans(v_trans), compressor_k(compressor_k), compressor_v(compressor_v),
     n_seq_max(n_seq_max), n_stream(unified ? 1 : n_seq_max), n_pad(n_pad), n_swa(n_swa), swa_type(swa_type) {
 
     GGML_ASSERT(kv_size % n_pad == 0);
@@ -288,8 +290,12 @@ llama_kv_cache::llama_kv_cache(
         LLAMA_LOG_WARN("%s: attention rotation force disabled (LLAMA_ATTN_ROT_DISABLE)\n", __func__);
     }
 
+    const bool use_rot_k = compressor_k == LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD;
+    const bool use_rot_v = compressor_v == LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD;
+
     attn_rot_k =
         !attn_rot_disable &&
+        use_rot_k &&
         n_embd_head_k_all > 0 &&
         ggml_is_quantized(type_k) &&
         hparams.n_embd_head_k() % 64 == 0;
@@ -301,6 +307,7 @@ llama_kv_cache::llama_kv_cache(
 
     attn_rot_v =
         !attn_rot_disable &&
+        use_rot_v &&
         n_embd_head_v_all > 0 &&
         ggml_is_quantized(type_v) &&
         hparams.n_embd_head_v() % 64 == 0;

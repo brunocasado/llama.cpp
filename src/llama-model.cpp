@@ -1980,16 +1980,18 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
 
     LLAMA_LOG_DEBUG("%s: using KV cache codec %s\n", __func__, kv_codec->name());
 
-    ggml_type type_k = params.type_k;
-    ggml_type type_v = params.type_v;
+    ggml_type type_k = kv_codec->resolve_type_k(params);
+    ggml_type type_v = kv_codec->resolve_type_v(params);
 
-    if (kv_codec->uses_quantized_kv()) {
-        type_k = GGML_TYPE_Q4_0;
-        type_v = GGML_TYPE_Q4_0;
+    const llama_kv_cache_compressor_type compressor_k = kv_codec->resolve_compressor_k(params);
+    const llama_kv_cache_compressor_type compressor_v = kv_codec->resolve_compressor_v(params);
 
-        LLAMA_LOG_INFO("%s: KV cache codec %s forcing K/V cache types to %s/%s\n", __func__,
-                kv_codec->name(), ggml_type_name(type_k), ggml_type_name(type_v));
-    }
+    LLAMA_LOG_INFO("%s: KV cache codec %s resolved K/V types to %s/%s with compressors %s/%s\n", __func__,
+            kv_codec->name(),
+            ggml_type_name(type_k),
+            ggml_type_name(type_v),
+            llama_kv_cache_compressor_type_name(compressor_k),
+            llama_kv_cache_compressor_type_name(compressor_v));
 
     switch (arch) {
         // Models that need specific instantiation should be handled in the
@@ -2017,6 +2019,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                         *this,
                         type_k,
                         type_v,
+                        compressor_k,
+                        compressor_v,
                         !cparams.flash_attn,
                         cparams.offload_kqv,
                         cparams.kv_unified,
@@ -2079,6 +2083,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             /* model             */ *this,
                             /* attn_type_k       */ type_k,
                             /* attn_type_v       */ type_v,
+                            /* attn_compressor_k */ compressor_k,
+                            /* attn_compressor_v */ compressor_v,
                             /* attn_v_trans      */ !cparams.flash_attn,
                             /* attn_swa_full     */ params.swa_full,
                             /* attn_kv_size      */ cparams.n_ctx_seq,
@@ -2098,6 +2104,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                             /* model             */ *this,
                             /* attn_type_k       */ type_k,
                             /* attn_type_v       */ type_v,
+                            /* attn_compressor_k */ compressor_k,
+                            /* attn_compressor_v */ compressor_v,
                             /* attn_v_trans      */ !cparams.flash_attn,
                             /* attn_kv_size      */ cparams.n_ctx_seq,
                             /* attn_n_pad        */ 1,
@@ -2139,6 +2147,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 *this,
                                 type_k,
                                 type_v,
+                                compressor_k,
+                                compressor_v,
                                 !cparams.flash_attn,
                                 cparams.offload_kqv,
                                 params.swa_full,
@@ -2157,6 +2167,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                                 hparams,
                                 type_k,
                                 type_v,
+                                compressor_k,
+                                compressor_v,
                                 !cparams.flash_attn,
                                 cparams.offload_kqv,
                                 cparams.kv_unified,
