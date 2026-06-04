@@ -9,6 +9,7 @@ struct llama_kv_codec_i {
 
     virtual llama_kv_cache_codec_type type() const = 0;
     virtual const char * name() const = 0;
+    virtual bool uses_quantized_kv() const = 0;
 };
 
 using llama_kv_codec_ptr = std::unique_ptr<llama_kv_codec_i>;

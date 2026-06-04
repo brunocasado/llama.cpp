@@ -1980,6 +1980,17 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
 
     LLAMA_LOG_DEBUG("%s: using KV cache codec %s\n", __func__, kv_codec->name());
 
+    ggml_type type_k = params.type_k;
+    ggml_type type_v = params.type_v;
+
+    if (kv_codec->uses_quantized_kv()) {
+        type_k = GGML_TYPE_Q4_0;
+        type_v = GGML_TYPE_Q4_0;
+
+        LLAMA_LOG_INFO("%s: KV cache codec %s forcing K/V cache types to %s/%s\n", __func__,
+                kv_codec->name(), ggml_type_name(type_k), ggml_type_name(type_v));
+    }
+
     switch (arch) {
         // Models that need specific instantiation should be handled in the
         // switch statement
@@ -2004,8 +2015,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
             {
                 res = new llama_kv_cache_dsa(
                         *this,
-                        params.type_k,
-                        params.type_v,
+                        type_k,
+                        type_v,
                         !cparams.flash_attn,
                         cparams.offload_kqv,
                         cparams.kv_unified,
@@ -2066,8 +2077,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                         // Use hybrid-iswa for hybrid models with SWA
                         res = new llama_memory_hybrid_iswa(
                             /* model             */ *this,
-                            /* attn_type_k       */ params.type_k,
-                            /* attn_type_v       */ params.type_v,
+                            /* attn_type_k       */ type_k,
+                            /* attn_type_v       */ type_v,
                             /* attn_v_trans      */ !cparams.flash_attn,
                             /* attn_swa_full     */ params.swa_full,
                             /* attn_kv_size      */ cparams.n_ctx_seq,
@@ -2085,8 +2096,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                     } else {
                         res = new llama_memory_hybrid(
                             /* model             */ *this,
-                            /* attn_type_k       */ params.type_k,
-                            /* attn_type_v       */ params.type_v,
+                            /* attn_type_k       */ type_k,
+                            /* attn_type_v       */ type_v,
                             /* attn_v_trans      */ !cparams.flash_attn,
                             /* attn_kv_size      */ cparams.n_ctx_seq,
                             /* attn_n_pad        */ 1,
@@ -2126,8 +2137,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
 
                         res = new llama_kv_cache_iswa(
                                 *this,
-                                params.type_k,
-                                params.type_v,
+                                type_k,
+                                type_v,
                                 !cparams.flash_attn,
                                 cparams.offload_kqv,
                                 params.swa_full,
@@ -2144,8 +2155,8 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
                         res = new llama_kv_cache(
                                 *this,
                                 hparams,
-                                params.type_k,
-                                params.type_v,
+                                type_k,
+                                type_v,
                                 !cparams.flash_attn,
                                 cparams.offload_kqv,
                                 cparams.kv_unified,

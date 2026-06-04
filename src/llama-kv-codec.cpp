@@ -10,6 +10,10 @@ struct llama_kv_codec_legacy : public llama_kv_codec_i {
     const char * name() const override {
         return llama_kv_cache_codec_type_name(type());
     }
+
+    bool uses_quantized_kv() const override {
+        return false;
+    }
 };
 
 struct llama_kv_codec_turboquant : public llama_kv_codec_i {
@@ -19,6 +23,10 @@ struct llama_kv_codec_turboquant : public llama_kv_codec_i {
 
     const char * name() const override {
         return llama_kv_cache_codec_type_name(type());
+    }
+
+    bool uses_quantized_kv() const override {
+        return true;
     }
 };
 
