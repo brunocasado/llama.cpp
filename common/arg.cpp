@@ -416,6 +416,24 @@ static std::string get_all_kv_cache_types() {
     return msg.str();
 }
 
+static llama_kv_cache_codec_type kv_cache_codec_type_from_str(const std::string & s) {
+    if (s == llama_kv_cache_codec_type_name(LLAMA_KV_CACHE_CODEC_TYPE_LEGACY)) {
+        return LLAMA_KV_CACHE_CODEC_TYPE_LEGACY;
+    }
+
+    if (s == llama_kv_cache_codec_type_name(LLAMA_KV_CACHE_CODEC_TYPE_TURBOQUANT)) {
+        return LLAMA_KV_CACHE_CODEC_TYPE_TURBOQUANT;
+    }
+
+    throw std::runtime_error("Unsupported KV cache codec: " + s);
+}
+
+static std::string get_all_kv_cache_codec_types() {
+    return string_format("%s, %s",
+            llama_kv_cache_codec_type_name(LLAMA_KV_CACHE_CODEC_TYPE_LEGACY),
+            llama_kv_cache_codec_type_name(LLAMA_KV_CACHE_CODEC_TYPE_TURBOQUANT));
+}
+
 static bool parse_bool_value(const std::string & value) {
     if (is_truthy(value)) {
         return true;
@@ -2068,6 +2086,19 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.cache_type_v = kv_cache_type_from_str(value);
         }
     ).set_env("LLAMA_ARG_CACHE_TYPE_V"));
+    add_opt(common_arg(
+        {"--kv-cache-codec"}, "TYPE",
+        string_format(
+            "KV cache codec\n"
+            "allowed values: %s\n"
+            "(default: %s)",
+            get_all_kv_cache_codec_types().c_str(),
+            llama_kv_cache_codec_type_name(params.kv_cache_codec_type)
+        ),
+        [](common_params & params, const std::string & value) {
+            params.kv_cache_codec_type = kv_cache_codec_type_from_str(value);
+        }
+    ).set_env("LLAMA_ARG_KV_CACHE_CODEC"));
     add_opt(common_arg(
         {"--hellaswag"},
         "compute HellaSwag score over random tasks from datafile supplied with -f",

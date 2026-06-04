@@ -191,6 +191,13 @@ extern "C" {
 
     LLAMA_API const char * llama_flash_attn_type_name(enum llama_flash_attn_type flash_attn_type);
 
+    enum llama_kv_cache_codec_type {
+        LLAMA_KV_CACHE_CODEC_TYPE_LEGACY     = 0,
+        LLAMA_KV_CACHE_CODEC_TYPE_TURBOQUANT = 1,
+    };
+
+    LLAMA_API const char * llama_kv_cache_codec_type_name(enum llama_kv_cache_codec_type kv_cache_codec_type);
+
     enum llama_split_mode {
         LLAMA_SPLIT_MODE_NONE   = 0, // single GPU
         LLAMA_SPLIT_MODE_LAYER  = 1, // split layers and KV across GPUs
@@ -364,6 +371,7 @@ extern "C" {
 
         enum ggml_type type_k; // data type for K cache [EXPERIMENTAL]
         enum ggml_type type_v; // data type for V cache [EXPERIMENTAL]
+        enum llama_kv_cache_codec_type kv_cache_codec_type; // KV cache codec [EXPERIMENTAL]
 
         // Abort callback
         // if it returns true, execution of llama_decode() will be aborted

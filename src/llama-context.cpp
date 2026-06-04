@@ -302,7 +302,7 @@ llama_context::llama_context(
         llama_memory_params params_mem = {
             /*.type_k        =*/ params.type_k,
             /*.type_v        =*/ params.type_v,
-            /*.kv_codec_type =*/ LLAMA_KV_CACHE_CODEC_TYPE_LEGACY,
+            /*.kv_codec_type =*/ params.kv_cache_codec_type,
             /*.swa_full      =*/ params.swa_full,
             /*.ctx_type      =*/ cparams.ctx_type,
         };
@@ -3366,6 +3366,7 @@ llama_context_params llama_context_default_params() {
         /*.cb_eval_user_data           =*/ nullptr,
         /*.type_k                      =*/ GGML_TYPE_F16,
         /*.type_v                      =*/ GGML_TYPE_F16,
+        /*.kv_cache_codec_type         =*/ LLAMA_KV_CACHE_CODEC_TYPE_LEGACY,
         /*.abort_callback              =*/ nullptr,
         /*.abort_callback_data         =*/ nullptr,
         /*.embeddings                  =*/ false,

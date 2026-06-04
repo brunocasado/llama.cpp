@@ -46,6 +46,16 @@ const char * llama_flash_attn_type_name(enum llama_flash_attn_type flash_attn_ty
     GGML_ABORT("fatal error");
 }
 
+const char * llama_kv_cache_codec_type_name(enum llama_kv_cache_codec_type kv_cache_codec_type) {
+    switch (kv_cache_codec_type) {
+        case LLAMA_KV_CACHE_CODEC_TYPE_LEGACY:
+            return "legacy";
+        case LLAMA_KV_CACHE_CODEC_TYPE_TURBOQUANT:
+            return "turboquant";
+    }
+    GGML_ABORT("fatal error");
+}
+
 struct llama_sampler_chain_params llama_sampler_chain_default_params() {
     struct llama_sampler_chain_params result = {
         /*.no_perf =*/ true,

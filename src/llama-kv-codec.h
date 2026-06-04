@@ -1,13 +1,8 @@
 #pragma once
 
+#include "llama.h"
+
 #include <memory>
-
-enum llama_kv_cache_codec_type {
-    LLAMA_KV_CACHE_CODEC_TYPE_LEGACY = 0,
-    LLAMA_KV_CACHE_CODEC_TYPE_COUNT,
-};
-
-const char * llama_kv_cache_codec_type_name(llama_kv_cache_codec_type type);
 
 struct llama_kv_codec_i {
     virtual ~llama_kv_codec_i() = default;
