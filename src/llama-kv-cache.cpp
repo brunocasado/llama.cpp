@@ -82,8 +82,8 @@ llama_kv_cache::llama_kv_cache(
         const llama_hparams & hparams,
                 ggml_type   type_k,
                 ggml_type   type_v,
-llama_kv_cache_compressor_type compressor_k,
-llama_kv_cache_compressor_type compressor_v,
+llama_kv_cache_compressor_type /*compressor_k*/,
+llama_kv_cache_compressor_type /*compressor_v*/,
                      bool   v_trans,
                      bool   offload,
                      bool   unified,
@@ -94,7 +94,7 @@ llama_kv_cache_compressor_type compressor_v,
            llama_swa_type   swa_type,
     const layer_filter_cb & filter,
     const  layer_reuse_cb & reuse) :
-    model(model), hparams(hparams), v_trans(v_trans), compressor_k(compressor_k), compressor_v(compressor_v),
+    model(model), hparams(hparams), v_trans(v_trans),
     n_seq_max(n_seq_max), n_stream(unified ? 1 : n_seq_max), n_pad(n_pad), n_swa(n_swa), swa_type(swa_type) {
 
     GGML_ASSERT(kv_size % n_pad == 0);
@@ -290,12 +290,8 @@ llama_kv_cache_compressor_type compressor_v,
         LLAMA_LOG_WARN("%s: attention rotation force disabled (LLAMA_ATTN_ROT_DISABLE)\n", __func__);
     }
 
-    const bool use_rot_k = compressor_k == LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD;
-    const bool use_rot_v = compressor_v == LLAMA_KV_CACHE_COMPRESSOR_TYPE_HADAMARD;
-
     attn_rot_k =
         !attn_rot_disable &&
-        use_rot_k &&
         n_embd_head_k_all > 0 &&
         ggml_is_quantized(type_k) &&
         hparams.n_embd_head_k() % 64 == 0;
@@ -307,7 +303,6 @@ llama_kv_cache_compressor_type compressor_v,
 
     attn_rot_v =
         !attn_rot_disable &&
-        use_rot_v &&
         n_embd_head_v_all > 0 &&
         ggml_is_quantized(type_v) &&
         hparams.n_embd_head_v() % 64 == 0;
@@ -1352,7 +1347,7 @@ ggml_tensor * llama_kv_cache::build_prefill_attn_v(ggml_context * ctx, ggml_tens
     return res;
 }
 
-ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il, const slot_info & sinfo) const {
+ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il, const slot_info & /*sinfo*/) const {
     const int32_t ikv = map_layer_ids.at(il);
 
     ggml_tensor * k = layers[ikv].k;
@@ -1362,24 +1357,6 @@ ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggm
     const int64_t n_tokens    = k_cur->ne[2];
 
     const int64_t n_embd_gqa = n_embd_head*n_head;
-
-    // Dense prefill writes are common and much cheaper as a contiguous copy than as
-    // an indexed set_rows scatter, especially when the destination is quantized.
-    if (sinfo.is_contiguous()) {
-        GGML_ASSERT(sinfo.n_stream() == 1);
-
-        auto * k_stream = layers[ikv].k_stream[sinfo.strm[0]];
-        GGML_ASSERT(k_stream != nullptr);
-        GGML_ASSERT(n_embd_gqa == k_stream->ne[0]);
-
-        ggml_tensor * k_dst = ggml_view_3d(ctx, k_stream,
-                n_embd_head, n_head, n_tokens,
-                ggml_row_size(k_stream->type, n_embd_head),
-                ggml_row_size(k_stream->type, n_embd_gqa),
-                ggml_row_size(k_stream->type, n_embd_gqa)*sinfo.head());
-
-        return ggml_cpy(ctx, k_cur, k_dst);
-    }
 
     // we can merge dims 0 and 1
     // TODO: add ggml helper function for this?
@@ -1403,7 +1380,7 @@ ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggm
     return ggml_set_rows(ctx, k, k_cur, k_idxs);
 }
 
-ggml_tensor * llama_kv_cache::cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggml_tensor * v_idxs, int32_t il, const slot_info & sinfo) const {
+ggml_tensor * llama_kv_cache::cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggml_tensor * v_idxs, int32_t il, const slot_info & /*sinfo*/) const {
     const int32_t ikv = map_layer_ids.at(il);
 
     auto * v = layers[ikv].v;
@@ -1413,22 +1390,6 @@ ggml_tensor * llama_kv_cache::cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggm
     const int64_t n_tokens    = v_cur->ne[2];
 
     const int64_t n_embd_gqa = n_embd_head*n_head;
-
-    if (sinfo.is_contiguous() && !v_trans) {
-        GGML_ASSERT(sinfo.n_stream() == 1);
-
-        auto * v_stream = layers[ikv].v_stream[sinfo.strm[0]];
-        GGML_ASSERT(v_stream != nullptr);
-        GGML_ASSERT(n_embd_gqa <= v_stream->ne[0]);
-
-        ggml_tensor * v_dst = ggml_view_3d(ctx, v_stream,
-                n_embd_head, n_head, n_tokens,
-                ggml_row_size(v_stream->type, n_embd_head),
-                ggml_row_size(v_stream->type, v_stream->ne[0]),
-                ggml_row_size(v_stream->type, v_stream->ne[0])*sinfo.head());
-
-        return ggml_cpy(ctx, v_cur, v_dst);
-    }
 
     // we can merge dims 0 and 1
     GGML_ASSERT(ggml_row_size(v_cur->type, n_embd_head) == v_cur->nb[1]);
@@ -2677,18 +2638,9 @@ ggml_tensor * llama_kv_cache_context::cpy_v(ggml_context * ctx, ggml_tensor * v_
 }
 
 bool llama_kv_cache_context::use_direct_kv_for_prefill_attn() const {
-    if (ubatches.empty()) {
-        return false;
-    }
-
-    const auto & sinfo = sinfos[i_cur];
-    const auto & ubatch = ubatches[i_cur];
-
-    return sinfo.n_stream() == 1 &&
-           sinfo.is_contiguous() &&
-           !sinfo.empty() &&
-           sinfo.head() == 0 &&
-           n_kv == static_cast<int32_t>(ubatch.n_tokens);
+    // Disabled until the fast prefill path is validated against real chat/server workloads.
+    // The legacy quantized KV path must remain bit-for-bit compatible with upstream behavior.
+    return false;
 }
 
 ggml_tensor * llama_kv_cache_context::build_prefill_attn_k(ggml_context * ctx, ggml_tensor * k_cur, int32_t il, bool allow_f16_fallback) const {

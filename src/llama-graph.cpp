@@ -2308,9 +2308,17 @@ ggml_tensor * llm_graph_context::build_attn(
     const auto & kq_mask = inp->get_kq_mask();
 
     ggml_tensor * q = q_cur;
-    const bool use_prefill_f16_fallback = cparams.flash_attn && kq_b == nullptr;
-    ggml_tensor * k = mctx_cur->build_prefill_attn_k(ctx0, k_cur, il, use_prefill_f16_fallback);
-    ggml_tensor * v = mctx_cur->build_prefill_attn_v(ctx0, v_cur, il, use_prefill_f16_fallback);
+    ggml_tensor * k = nullptr;
+    ggml_tensor * v = nullptr;
+
+    if (mctx_cur->use_direct_kv_for_prefill_attn()) {
+        const bool use_prefill_f16_fallback = cparams.flash_attn && kq_b == nullptr;
+        k = mctx_cur->build_prefill_attn_k(ctx0, k_cur, il, use_prefill_f16_fallback);
+        v = mctx_cur->build_prefill_attn_v(ctx0, v_cur, il, use_prefill_f16_fallback);
+    } else {
+        k = mctx_cur->get_k(ctx0, il);
+        v = mctx_cur->get_v(ctx0, il);
+    }
 
     ggml_tensor * cur = build_attn_mha(q, k, v, kq_b, kq_mask, sinks, v_mla, kq_scale, il);
     cb(cur, "kqv_out", il);

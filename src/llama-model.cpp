@@ -1985,6 +1985,14 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
 
     const llama_kv_cache_compressor_type compressor_k = kv_codec->resolve_compressor_k(params);
     const llama_kv_cache_compressor_type compressor_v = kv_codec->resolve_compressor_v(params);
+    const bool runtime_encode = kv_codec->has_runtime_encode();
+
+    if (!runtime_encode && params.kv_codec_type != LLAMA_KV_CACHE_CODEC_TYPE_LEGACY) {
+        LLAMA_LOG_WARN("%s: KV cache codec %s does not provide runtime encode yet; using legacy cache write path with resolved types %s/%s\n", __func__,
+                kv_codec->name(),
+                ggml_type_name(type_k),
+                ggml_type_name(type_v));
+    }
 
     LLAMA_LOG_INFO("%s: KV cache codec %s resolved K/V types to %s/%s with compressors %s/%s\n", __func__,
             kv_codec->name(),

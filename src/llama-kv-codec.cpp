@@ -87,6 +87,10 @@ struct llama_kv_codec_turboquant : public llama_kv_codec_i {
 
         return turboquant_default_compressor_v(type_v);
     }
+
+    bool has_runtime_encode() const override {
+        return false;
+    }
 };
 
 }

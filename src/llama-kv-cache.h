@@ -248,9 +248,6 @@ private:
     // env: LLAMA_ATTN_ROT_DISABLE
     bool attn_rot_k = false;
     bool attn_rot_v = false;
-    llama_kv_cache_compressor_type compressor_k = LLAMA_KV_CACHE_COMPRESSOR_TYPE_DIRECT;
-    llama_kv_cache_compressor_type compressor_v = LLAMA_KV_CACHE_COMPRESSOR_TYPE_DIRECT;
-
     // if all layers participating in the cache have constant head size, the value is stored here
     // otherwise the value is -1
     int32_t n_embd_head_k_all = 0;

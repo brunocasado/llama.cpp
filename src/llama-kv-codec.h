@@ -15,6 +15,9 @@ struct llama_kv_codec_i {
     virtual ggml_type resolve_type_v(const llama_memory_params & params) const = 0;
     virtual llama_kv_cache_compressor_type resolve_compressor_k(const llama_memory_params & params) const = 0;
     virtual llama_kv_cache_compressor_type resolve_compressor_v(const llama_memory_params & params) const = 0;
+    virtual bool has_runtime_encode() const {
+        return false;
+    }
 };
 
 using llama_kv_codec_ptr = std::unique_ptr<llama_kv_codec_i>;
