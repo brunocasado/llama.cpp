@@ -2308,8 +2308,16 @@ ggml_tensor * llm_graph_context::build_attn(
     const auto & kq_mask = inp->get_kq_mask();
 
     ggml_tensor * q = q_cur;
-    ggml_tensor * k = mctx_cur->get_k(ctx0, il);
-    ggml_tensor * v = mctx_cur->get_v(ctx0, il);
+    ggml_tensor * k = nullptr;
+    ggml_tensor * v = nullptr;
+
+    if (mctx_cur->use_direct_kv_for_prefill_attn()) {
+        k = ggml_reshape_4d(ctx0, k_cur, k_cur->ne[0], k_cur->ne[1], k_cur->ne[2], 1);
+        v = ggml_reshape_4d(ctx0, v_cur, v_cur->ne[0], v_cur->ne[1], v_cur->ne[2], 1);
+    } else {
+        k = mctx_cur->get_k(ctx0, il);
+        v = mctx_cur->get_v(ctx0, il);
+    }
 
     ggml_tensor * cur = build_attn_mha(q, k, v, kq_b, kq_mask, sinks, v_mla, kq_scale, il);
     cb(cur, "kqv_out", il);

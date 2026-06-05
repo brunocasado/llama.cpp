@@ -703,8 +703,15 @@ llama_kv_cache::slot_info_vec_t llama_kv_cache::prepare(const std::vector<llama_
     bool success = true;
 
     for (const auto & ubatch : ubatches) {
-        // only find a suitable slot for the ubatch. don't modify the cells yet
-        const auto sinfo_new = find_slot(ubatch, false);
+        // Prefer contiguous placement for single-stream prompt batches so the write path can
+        // use dense copies/quantization instead of indexed scatter writes. Fall back to the
+        // general scatter placement if the ring buffer is already fragmented.
+        const bool prefer_contiguous = n_stream == 1 && ubatch.n_seqs_unq == 1 && ubatch.n_tokens > 1;
+
+        auto sinfo_new = prefer_contiguous ? find_slot(ubatch, true) : slot_info{};
+        if (sinfo_new.empty()) {
+            sinfo_new = find_slot(ubatch, false);
+        }
         if (sinfo_new.empty()) {
             success = false;
             break;
@@ -1208,8 +1215,6 @@ ggml_tensor * llama_kv_cache::get_v(ggml_context * ctx, int32_t il, uint32_t n_k
 }
 
 ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il, const slot_info & sinfo) const {
-    GGML_UNUSED(sinfo);
-
     const int32_t ikv = map_layer_ids.at(il);
 
     ggml_tensor * k = layers[ikv].k;
@@ -1219,6 +1224,24 @@ ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggm
     const int64_t n_tokens    = k_cur->ne[2];
 
     const int64_t n_embd_gqa = n_embd_head*n_head;
+
+    // Dense prefill writes are common and much cheaper as a contiguous copy than as
+    // an indexed set_rows scatter, especially when the destination is quantized.
+    if (sinfo.is_contiguous()) {
+        GGML_ASSERT(sinfo.n_stream() == 1);
+
+        auto * k_stream = layers[ikv].k_stream[sinfo.strm[0]];
+        GGML_ASSERT(k_stream != nullptr);
+        GGML_ASSERT(n_embd_gqa == k_stream->ne[0]);
+
+        ggml_tensor * k_dst = ggml_view_3d(ctx, k_stream,
+                n_embd_head, n_head, n_tokens,
+                ggml_row_size(k_stream->type, n_embd_head),
+                ggml_row_size(k_stream->type, n_embd_gqa),
+                ggml_row_size(k_stream->type, n_embd_gqa)*sinfo.head());
+
+        return ggml_cpy(ctx, k_cur, k_dst);
+    }
 
     // we can merge dims 0 and 1
     // TODO: add ggml helper function for this?
@@ -1243,8 +1266,6 @@ ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggm
 }
 
 ggml_tensor * llama_kv_cache::cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggml_tensor * v_idxs, int32_t il, const slot_info & sinfo) const {
-    GGML_UNUSED(sinfo);
-
     const int32_t ikv = map_layer_ids.at(il);
 
     auto * v = layers[ikv].v;
@@ -1254,6 +1275,22 @@ ggml_tensor * llama_kv_cache::cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggm
     const int64_t n_tokens    = v_cur->ne[2];
 
     const int64_t n_embd_gqa = n_embd_head*n_head;
+
+    if (sinfo.is_contiguous() && !v_trans) {
+        GGML_ASSERT(sinfo.n_stream() == 1);
+
+        auto * v_stream = layers[ikv].v_stream[sinfo.strm[0]];
+        GGML_ASSERT(v_stream != nullptr);
+        GGML_ASSERT(n_embd_gqa <= v_stream->ne[0]);
+
+        ggml_tensor * v_dst = ggml_view_3d(ctx, v_stream,
+                n_embd_head, n_head, n_tokens,
+                ggml_row_size(v_stream->type, n_embd_head),
+                ggml_row_size(v_stream->type, v_stream->ne[0]),
+                ggml_row_size(v_stream->type, v_stream->ne[0])*sinfo.head());
+
+        return ggml_cpy(ctx, v_cur, v_dst);
+    }
 
     // we can merge dims 0 and 1
     GGML_ASSERT(ggml_row_size(v_cur->type, n_embd_head) == v_cur->nb[1]);
@@ -1366,6 +1403,10 @@ ggml_tensor * llama_kv_cache::build_input_v_rot(ggml_context * ctx) const {
 }
 
 void llama_kv_cache::set_input_k_idxs(ggml_tensor * dst, const llama_ubatch * ubatch, const slot_info & sinfo) const {
+    if (!dst || dst->buffer == nullptr) {
+        return;
+    }
+
     const uint32_t n_tokens = ubatch->n_tokens;
     GGML_ASSERT(n_tokens == (int64_t) sinfo.size()*sinfo.n_stream());
 
@@ -1382,6 +1423,10 @@ void llama_kv_cache::set_input_k_idxs(ggml_tensor * dst, const llama_ubatch * ub
 }
 
 void llama_kv_cache::set_input_v_idxs(ggml_tensor * dst, const llama_ubatch * ubatch, const slot_info & sinfo) const {
+    if (!dst || dst->buffer == nullptr) {
+        return;
+    }
+
     const uint32_t n_tokens = ubatch->n_tokens;
     GGML_ASSERT(n_tokens == (int64_t) sinfo.size()*sinfo.n_stream());
 
@@ -2491,6 +2536,21 @@ ggml_tensor * llama_kv_cache_context::cpy_k(ggml_context * ctx, ggml_tensor * k_
 
 ggml_tensor * llama_kv_cache_context::cpy_v(ggml_context * ctx, ggml_tensor * v_cur, ggml_tensor * v_idxs, int32_t il) const {
     return kv->cpy_v(ctx, v_cur, v_idxs, il, sinfos[i_cur]);
+}
+
+bool llama_kv_cache_context::use_direct_kv_for_prefill_attn() const {
+    if (ubatches.empty()) {
+        return false;
+    }
+
+    const auto & sinfo = sinfos[i_cur];
+    const auto & ubatch = ubatches[i_cur];
+
+    return sinfo.n_stream() == 1 &&
+           sinfo.is_contiguous() &&
+           !sinfo.empty() &&
+           sinfo.head() == 0 &&
+           n_kv == static_cast<int32_t>(ubatch.n_tokens);
 }
 
 ggml_tensor * llama_kv_cache_context::build_input_k_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const {
