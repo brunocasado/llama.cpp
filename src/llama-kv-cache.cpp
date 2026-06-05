@@ -1214,6 +1214,144 @@ ggml_tensor * llama_kv_cache::get_v(ggml_context * ctx, int32_t il, uint32_t n_k
             ggml_row_size(v->type, kv_size*n_embd_v_gqa)*sinfo.s0);
 }
 
+ggml_tensor * llama_kv_cache::build_prefill_attn_k(ggml_context * ctx, ggml_tensor * k_cur, int32_t il, uint32_t n_kv, const slot_info & sinfo, bool allow_f16_fallback) const {
+    if (sinfo.empty() || sinfo.n_stream() != 1 || !sinfo.is_contiguous()) {
+        return get_k(ctx, il, n_kv, sinfo);
+    }
+
+    const uint32_t head = sinfo.head();
+    const uint32_t cur_tokens = static_cast<uint32_t>(k_cur->ne[2]);
+
+    if (head > n_kv || head + cur_tokens > n_kv) {
+        return get_k(ctx, il, n_kv, sinfo);
+    }
+
+    ggml_tensor * cur = ggml_reshape_4d(ctx, k_cur, k_cur->ne[0], k_cur->ne[1], k_cur->ne[2], 1);
+
+    if (head == 0 && n_kv == cur_tokens) {
+        return cur;
+    }
+
+    if (!allow_f16_fallback) {
+        return get_k(ctx, il, n_kv, sinfo);
+    }
+
+    const int32_t ikv = map_layer_ids.at(il);
+    auto * k_stream = layers[ikv].k_stream[sinfo.strm[0]];
+    GGML_ASSERT(k_stream != nullptr);
+
+    const int64_t n_embd_head = hparams.n_embd_head_k(il);
+    const int64_t n_head = hparams.n_head_kv(il);
+    const int64_t n_embd_gqa = hparams.n_embd_k_gqa(il);
+
+    const auto build_range = [&](uint32_t start, uint32_t len) -> ggml_tensor * {
+        if (len == 0) {
+            return nullptr;
+        }
+
+        return ggml_view_4d(ctx, k_stream,
+                n_embd_head, n_head, len, 1,
+                ggml_row_size(k_stream->type, n_embd_head),
+                ggml_row_size(k_stream->type, n_embd_gqa),
+                ggml_row_size(k_stream->type, n_embd_gqa*k_stream->ne[1]),
+                ggml_row_size(k_stream->type, n_embd_gqa)*start);
+    };
+
+    ggml_tensor * prefix = build_range(0, head);
+    ggml_tensor * suffix = build_range(head + cur_tokens, n_kv - head - cur_tokens);
+
+    const ggml_type attn_type = GGML_TYPE_F16;
+
+    if (prefix) {
+        prefix = ggml_cast(ctx, prefix, attn_type);
+    }
+    if (cur->type != attn_type) {
+        cur = ggml_cast(ctx, cur, attn_type);
+    }
+    if (suffix) {
+        suffix = ggml_cast(ctx, suffix, attn_type);
+    }
+
+    ggml_tensor * res = cur;
+    if (prefix) {
+        res = ggml_concat(ctx, prefix, res, 2);
+    }
+    if (suffix) {
+        res = ggml_concat(ctx, res, suffix, 2);
+    }
+
+    return res;
+}
+
+ggml_tensor * llama_kv_cache::build_prefill_attn_v(ggml_context * ctx, ggml_tensor * v_cur, int32_t il, uint32_t n_kv, const slot_info & sinfo, bool allow_f16_fallback) const {
+    if (sinfo.empty() || sinfo.n_stream() != 1 || !sinfo.is_contiguous() || v_trans) {
+        return get_v(ctx, il, n_kv, sinfo);
+    }
+
+    const uint32_t head = sinfo.head();
+    const uint32_t cur_tokens = static_cast<uint32_t>(v_cur->ne[2]);
+
+    if (head > n_kv || head + cur_tokens > n_kv) {
+        return get_v(ctx, il, n_kv, sinfo);
+    }
+
+    ggml_tensor * cur = ggml_reshape_4d(ctx, v_cur, v_cur->ne[0], v_cur->ne[1], v_cur->ne[2], 1);
+
+    if (head == 0 && n_kv == cur_tokens) {
+        return cur;
+    }
+
+    if (!allow_f16_fallback) {
+        return get_v(ctx, il, n_kv, sinfo);
+    }
+
+    const int32_t ikv = map_layer_ids.at(il);
+    auto * v_stream = layers[ikv].v_stream[sinfo.strm[0]];
+    GGML_ASSERT(v_stream != nullptr);
+
+    const int64_t n_embd_head = hparams.n_embd_head_v(il);
+    const int64_t n_head = hparams.n_head_kv(il);
+    const int64_t n_embd_gqa = hparams.n_embd_v_gqa(il);
+
+    const auto build_range = [&](uint32_t start, uint32_t len) -> ggml_tensor * {
+        if (len == 0) {
+            return nullptr;
+        }
+
+        return ggml_view_4d(ctx, v_stream,
+                n_embd_head, n_head, len, 1,
+                ggml_row_size(v_stream->type, n_embd_head),
+                ggml_row_size(v_stream->type, n_embd_gqa),
+                ggml_row_size(v_stream->type, n_embd_gqa*v_stream->ne[1]),
+                ggml_row_size(v_stream->type, n_embd_gqa)*start);
+    };
+
+    ggml_tensor * prefix = build_range(0, head);
+    ggml_tensor * suffix = build_range(head + cur_tokens, n_kv - head - cur_tokens);
+
+    const ggml_type attn_type = GGML_TYPE_F16;
+
+    if (prefix) {
+        prefix = ggml_cast(ctx, prefix, attn_type);
+    }
+    if (cur->type != attn_type) {
+        cur = ggml_cast(ctx, cur, attn_type);
+    }
+    if (suffix) {
+        suffix = ggml_cast(ctx, suffix, attn_type);
+    }
+
+    ggml_tensor * res = cur;
+    if (prefix) {
+        res = ggml_concat(ctx, prefix, res, 2);
+    }
+    if (suffix) {
+        res = ggml_concat(ctx, res, suffix, 2);
+    }
+
+    return res;
+}
+
 ggml_tensor * llama_kv_cache::cpy_k(ggml_context * ctx, ggml_tensor * k_cur, ggml_tensor * k_idxs, int32_t il, const slot_info & sinfo) const {
     const int32_t ikv = map_layer_ids.at(il);
 
@@ -2551,6 +2689,14 @@ bool llama_kv_cache_context::use_direct_kv_for_prefill_attn() const {
            !sinfo.empty() &&
            sinfo.head() == 0 &&
            n_kv == static_cast<int32_t>(ubatch.n_tokens);
+}
+
+ggml_tensor * llama_kv_cache_context::build_prefill_attn_k(ggml_context * ctx, ggml_tensor * k_cur, int32_t il, bool allow_f16_fallback) const {
+    return kv->build_prefill_attn_k(ctx, k_cur, il, n_kv, sinfos[i_cur], allow_f16_fallback);
+}
+
+ggml_tensor * llama_kv_cache_context::build_prefill_attn_v(ggml_context * ctx, ggml_tensor * v_cur, int32_t il, bool allow_f16_fallback) const {
+    return kv->build_prefill_attn_v(ctx, v_cur, il, n_kv, sinfos[i_cur], allow_f16_fallback);
 }
 
 ggml_tensor * llama_kv_cache_context::build_input_k_idxs(ggml_context * ctx, const llama_ubatch & ubatch) const {
