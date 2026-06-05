@@ -25,6 +25,7 @@ public:
                 ggml_type   type_v,
     llama_kv_cache_compressor_type compressor_k,
     llama_kv_cache_compressor_type compressor_v,
+                     bool   experimental_prefill_fast_path,
                      bool   v_trans,
                  uint32_t   kv_size,
                  uint32_t   n_pad,

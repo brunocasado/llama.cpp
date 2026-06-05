@@ -17,6 +17,7 @@ llama_kv_cache_iswa::llama_kv_cache_iswa(
                 ggml_type   type_v,
 llama_kv_cache_compressor_type compressor_k,
 llama_kv_cache_compressor_type compressor_v,
+                     bool   experimental_prefill_fast_path,
                      bool   v_trans,
                      bool   offload,
                      bool   swa_full,
@@ -63,6 +64,7 @@ llama_kv_cache_compressor_type compressor_v,
 
     kv_base = std::make_unique<llama_kv_cache>(
             model, hparams, type_k, type_v, compressor_k, compressor_v,
+            experimental_prefill_fast_path,
             v_trans, offload, unified, size_base, n_seq_max, n_pad,
             0, LLAMA_SWA_TYPE_NONE, filter_base, reuse);
 
@@ -70,6 +72,7 @@ llama_kv_cache_compressor_type compressor_v,
 
     kv_swa = std::make_unique<llama_kv_cache>(
             model, hparams, type_k, type_v, compressor_k, compressor_v,
+            experimental_prefill_fast_path,
             v_trans, offload, unified, size_swa, n_seq_max, n_pad,
             hparams.n_swa, hparams.swa_type, filter_swa, reuse);
 }

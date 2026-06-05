@@ -103,6 +103,7 @@ public:
                     ggml_type   type_v,
     llama_kv_cache_compressor_type compressor_k,
     llama_kv_cache_compressor_type compressor_v,
+                         bool   experimental_prefill_fast_path,
                          bool   v_trans,
                          bool   offload,
                          bool   unified,
@@ -160,6 +161,7 @@ public:
 
     ggml_type type_k() const;
     ggml_type type_v() const;
+    bool use_prefill_fast_path() const;
 
     //
     // graph_build API
@@ -246,6 +248,7 @@ private:
     const uint32_t n_swa = 0;
 
     // env: LLAMA_ATTN_ROT_DISABLE
+    const bool experimental_prefill_fast_path = false;
     bool attn_rot_k = false;
     bool attn_rot_v = false;
     // if all layers participating in the cache have constant head size, the value is stored here

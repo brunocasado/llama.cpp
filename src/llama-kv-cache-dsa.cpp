@@ -17,6 +17,7 @@ llama_kv_cache_dsa::llama_kv_cache_dsa(
                 ggml_type   type_v,
 llama_kv_cache_compressor_type compressor_k,
 llama_kv_cache_compressor_type compressor_v,
+                     bool   experimental_prefill_fast_path,
                      bool   v_trans,
                      bool   offload,
                      bool   unified,
@@ -33,6 +34,7 @@ llama_kv_cache_compressor_type compressor_v,
 
     kv_mla = std::make_unique<llama_kv_cache>(
             model, model.hparams, type_k, type_v, compressor_k, compressor_v,
+            experimental_prefill_fast_path,
             v_trans, offload, unified, kv_size, n_seq_max, n_pad,
             n_swa, swa_type, filter, reuse);
 
@@ -50,6 +52,7 @@ llama_kv_cache_compressor_type compressor_v,
 
     kv_lid = std::make_unique<llama_kv_cache>(
             model, hparams_lid, type_k, type_v, compressor_k, compressor_v,
+            experimental_prefill_fast_path,
             v_trans, offload, unified, kv_size, n_seq_max, n_pad,
             n_swa, swa_type, filter, reuse);
 }
