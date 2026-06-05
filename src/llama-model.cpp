@@ -1986,7 +1986,9 @@ llama_memory_i * llama_model::create_memory(const llama_memory_params & params, 
     const llama_kv_cache_compressor_type compressor_k = kv_codec->resolve_compressor_k(params);
     const llama_kv_cache_compressor_type compressor_v = kv_codec->resolve_compressor_v(params);
     const bool runtime_encode = kv_codec->has_runtime_encode();
-    const bool experimental_prefill_fast_path = params.kv_codec_type == LLAMA_KV_CACHE_CODEC_TYPE_TURBOQUANT;
+    // The turboquant compatibility shim is still correctness-first: real chat/reasoning models
+    // regress with the experimental prefill fast path, so keep it disabled until a real backend exists.
+    const bool experimental_prefill_fast_path = false;
 
     if (!runtime_encode && params.kv_codec_type != LLAMA_KV_CACHE_CODEC_TYPE_LEGACY) {
         LLAMA_LOG_WARN("%s: KV cache codec %s does not provide runtime encode yet; using the experimental compatibility path with resolved types %s/%s and compressors %s/%s (this is not the full TurboQuant backend)\n", __func__,

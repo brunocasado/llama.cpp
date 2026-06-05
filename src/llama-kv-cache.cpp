@@ -2678,7 +2678,10 @@ ggml_tensor * llama_kv_cache_context::cpy_v(ggml_context * ctx, ggml_tensor * v_
 }
 
 bool llama_kv_cache_context::use_direct_kv_for_prefill_attn() const {
-    return kv->use_prefill_fast_path();
+    // The direct prefill-attention read path is still unstable on real chat/reasoning workloads
+    // for the turboquant compatibility shim. Keep the fast contiguous KV writes, but read prefill
+    // attention through the normal cache path until a real TurboQuant backend exists.
+    return false;
 }
 
 ggml_tensor * llama_kv_cache_context::build_prefill_attn_k(ggml_context * ctx, ggml_tensor * k_cur, int32_t il, bool allow_f16_fallback) const {
